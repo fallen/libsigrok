@@ -1,3 +1,10 @@
+/*
+ * SucréLA hardware support code
+ * Author: Yann Sionneau
+ * This is *very* heavily inspired from fx2lafw support code
+ * in src/hardware/fx2lafw
+ */
+
 #include "protocol.h"
 #include "csr.h"
 
