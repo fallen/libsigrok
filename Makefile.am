@@ -234,6 +234,17 @@ src_libdrivers_tail_la_SOURCES = src/driver_list_stop.c
 
 src_libdrivers_la_SOURCES = src/drivers.c
 
+if HW_SUCRELA
+src_libdrivers_la_SOURCES += \
+	src/hardware/sucrela/api.c \
+	src/hardware/sucrela/protocol.c \
+	src/hardware/sucrela/protocol.h \
+	src/hardware/sucrela/csr.h \
+	src/hardware/sucrela/libuartbone/uartbone.c \
+	src/hardware/sucrela/libuartbone/uartbone.h \
+	src/hardware/sucrela/libuartbone/uartbone_linux.c
+endif
+
 if HW_AGILENT_DMM
 src_libdrivers_la_SOURCES += \
 	src/hardware/agilent-dmm/protocol.h \
