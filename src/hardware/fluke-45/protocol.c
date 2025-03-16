@@ -261,6 +261,10 @@ SR_PRIV int fl45_scpi_receive_data(int fd, int revents, void *cb_data)
 			/* Note: Fluke 45 sends all data in text strings. */
 			reading = devc->response;
 
+			if ((res != SR_OK) || !reading) {
+				sr_dbg("Issue reading scpi response");
+				return res;
+			}
 			/* Deal with OL reading. */
 			if (strcmp(reading, "+1E+9") == 0) {
 				fv = INFINITY;
