@@ -574,12 +574,13 @@ static int make_column_details_from_format(const struct sr_input *in,
 	for (format_idx = 0; format_idx < format_count; format_idx++) {
 		format = formats[format_idx];
 		ret = split_column_format(format, &c, &f, &b);
-		sr_dbg("fmt %s -> %zu cols, %s fmt, %zu bits, rc %d", format, c, col_format_text[f], b, ret);
 		if (ret != SR_OK) {
 			sr_err("Cannot parse columns format %s (field split, %s).", column_format, format);
 			g_strfreev(formats);
 			return SR_ERR_ARG;
 		}
+
+		sr_dbg("fmt %s -> %zu cols, %s fmt, %zu bits, rc %d", format, c, col_format_text[f], b, ret);
 		if (f && !c) {
 			/* User requested "auto-count", must be last format. */
 			if (formats[format_idx + 1]) {
