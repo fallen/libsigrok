@@ -534,7 +534,7 @@ static int config_set(uint32_t key, GVariant *data,
 	int ret, idx;
 	const char *tmp_str;
 	char buffer[16];
-	char *cmd = "";
+	char *cmd = NULL;
 	char cmd4[4];
 
 	devc = sdi->priv;
@@ -594,9 +594,12 @@ static int config_set(uint32_t key, GVariant *data,
 		case 1000000000:
 			cmd = g_strdup_printf("%" PRIu64 "NS", p);
 			break;
+		default:
+			return SR_ERR_ARG;
 		}
 		ret = siglent_sds_config_set(sdi, "TDIV %s", cmd);
-		g_free(cmd);
+		if (cmd)
+			g_free(cmd);
 		return ret;
 	case SR_CONF_TRIGGER_SOURCE:
 		if ((idx = std_str_idx(data, ARRAY_AND_SIZE(trigger_sources))) < 0)
@@ -639,9 +642,12 @@ static int config_set(uint32_t key, GVariant *data,
 		case 100000:
 			cmd = g_strdup_printf("%" PRIu64 "UV", p);
 			break;
+		default:
+			return SR_ERR_ARG;
 		}
 		ret = siglent_sds_config_set(sdi, "C%d:VDIV %s", i + 1, cmd);
-		g_free(cmd);
+		if (cmd)
+			g_free(cmd);
 		return ret;
 	case SR_CONF_COUPLING:
 		if (!cg)
