@@ -117,6 +117,11 @@ SR_PRIV int sr_atol_base(const char *str, long *ret, char **end, int base)
 	long num;
 	char *endptr;
 
+	if (!str) {
+		sr_err("called sr_atol_base with NULL arg!");
+		return SR_ERR;
+	}
+
 	/* Add "0b" prefix support which strtol(3) may be missing. */
 	while (str && isspace(*str))
 		str++;
