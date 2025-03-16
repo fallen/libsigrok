@@ -85,8 +85,6 @@ SR_PRIV int itech_it8500_send_cmd(struct sr_serial_dev_inst *serial,
 	cmd_buf = g_malloc0(IT8500_PACKET_LEN);
 	resp_buf = g_malloc0(IT8500_PACKET_LEN);
 	resp = g_malloc0(sizeof(*resp));
-	if (!cmd_buf || !resp_buf || !resp)
-		return SR_ERR_MALLOC;
 
 	/*
 	 * Construct request from: preamble, address, command, data,

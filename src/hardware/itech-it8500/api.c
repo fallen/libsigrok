@@ -112,8 +112,6 @@ static GSList *scan(struct sr_dev_driver *di, GSList *options)
 	cmd = g_malloc0(sizeof(*cmd));
 	devc = g_malloc0(sizeof(*devc));
 	sdi = g_malloc0(sizeof(*sdi));
-	if (!cmd || !devc || !sdi)
-		return NULL;
 
 	serial = NULL;
 	response = NULL;
@@ -459,8 +457,6 @@ static int config_set(uint32_t key, GVariant *data,
 		return SR_ERR_ARG;
 
 	cmd = g_malloc0(sizeof(*cmd));
-	if (!cmd)
-		return SR_ERR_MALLOC;
 
 	devc = sdi->priv;
 	response = NULL;
@@ -666,16 +662,14 @@ static int dev_open(struct sr_dev_inst *sdi)
 		/* Request the unit to enter remote control mode. */
 		response = NULL;
 		cmd = g_malloc0(sizeof(*cmd));
-		if (cmd) {
-			cmd->address = devc->address;
-			cmd->command = CMD_SET_REMOTE_MODE;
-			cmd->data[0] = 1;
-			res = itech_it8500_cmd(sdi, cmd, &response);
-			if (res != SR_OK)
-				sr_dbg("Failed to set unit to remote mode");
-			g_free(cmd);
-			g_free(response);
-		}
+		cmd->address = devc->address;
+		cmd->command = CMD_SET_REMOTE_MODE;
+		cmd->data[0] = 1;
+		res = itech_it8500_cmd(sdi, cmd, &response);
+		if (res != SR_OK)
+			sr_dbg("Failed to set unit to remote mode");
+		g_free(cmd);
+		g_free(response);
 	}
 
 	return ret;
@@ -693,16 +687,14 @@ static int dev_close(struct sr_dev_inst *sdi)
 	devc = sdi->priv;
 	response = NULL;
 	cmd = g_malloc0(sizeof(*cmd));
-	if (cmd) {
-		/* Request the unit to enter local control mode. */
-		cmd->address = devc->address;
-		cmd->command = CMD_SET_REMOTE_MODE;
-		cmd->data[0] = 0;
-		ret = itech_it8500_cmd(sdi, cmd, &response);
-		if (ret != SR_OK)
-			sr_dbg("Failed to set unit back to local mode: %d",
-				ret);
-	}
+	/* Request the unit to enter local control mode. */
+	cmd->address = devc->address;
+	cmd->command = CMD_SET_REMOTE_MODE;
+	cmd->data[0] = 0;
+	ret = itech_it8500_cmd(sdi, cmd, &response);
+	if (ret != SR_OK)
+		sr_dbg("Failed to set unit back to local mode: %d",
+			ret);
 
 	g_free(cmd);
 	g_free(response);
