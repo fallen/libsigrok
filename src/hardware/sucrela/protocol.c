@@ -282,7 +282,7 @@ SR_PRIV int dev_acquisition_start(const struct sr_dev_inst *sdi)
 SR_PRIV int sucrela_dev_open(struct sr_dev_inst *sdi, struct sr_dev_driver *di)
 {
 	libusb_device **devlist;
-	int ret = SR_ERR, i, device_count;
+	int ret = SR_ERR, i, j;
 	struct sr_usb_dev_inst *usb;
         struct libusb_device_descriptor des;
         struct drv_context *drvc;
@@ -290,6 +290,13 @@ SR_PRIV int sucrela_dev_open(struct sr_dev_inst *sdi, struct sr_dev_driver *di)
 	char connection_id[64];
 	char ident_str[256];
 	char c;
+	ssize_t device_count;
+        uint64_t max_samplerate;
+        uint8_t hspi_width;
+        struct sr_channel *channels_to_remove[16];
+	struct sr_channel *ch;
+
+        sr_err("sucrela_dev_open()\n");
 
 	drvc = di->context;
         usb = sdi->conn;
@@ -346,7 +353,35 @@ SR_PRIV int sucrela_dev_open(struct sr_dev_inst *sdi, struct sr_dev_driver *di)
 	uartbone_unix_init(devc->uartbone_ctx, "usb://", 0, 4);
 	libusb_free_device_list(devlist, 1);
 
-        memset(ident_str, '\0', sizeof(ident_str));
+	max_samplerate = uartbone_read(devc->uartbone_ctx, CSR_LA_SAMPLERATE_ADDR);
+	hspi_width = uartbone_read(devc->uartbone_ctx,
+				   CSR_LA_HSPI_TX_HSPI_WIDTH_R_ADDR);
+	devc->probe_number = uartbone_read(devc->uartbone_ctx, CSR_LA_NUM_PROBES_ADDR);
+        sr_err("max_samplerate: %d\n", max_samplerate);
+        sr_err("hspi_width: %d\n", hspi_width);
+        sr_err("probe_number: %d\n", devc->probe_number);
+
+	memset(channels_to_remove, 0, sizeof(channels_to_remove));
+
+        for (i = 0, j = devc->probe_number; j < 16; j++, i++) {
+		ch = g_slist_nth(sdi->channels, j)->data;
+		sr_err("removing channel %d %s\n", j,
+		       ch->name);
+		channels_to_remove[i] = ch;
+	}
+
+	for (i = 0, ch = channels_to_remove[0]; ch; i++) {
+		ch = channels_to_remove[i];
+                sdi->channels = g_slist_remove(sdi->channels, ch);
+	}
+
+	// Create samplerate array
+	for (i = 1; i <= NUM_SAMPLERATES; i++) {
+		devc->samplerates[i-1] = max_samplerate / (2*i);
+	}
+
+	i = 0;
+	memset(ident_str, '\0', sizeof(ident_str));
         do {
             c = uartbone_read(devc->uartbone_ctx, CSR_IDENTIFIER_MEM_BASE+i*4);
             ident_str[i++] = c;
