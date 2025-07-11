@@ -15,13 +15,10 @@ static int sucrela_start_sampling(const struct sr_dev_inst *sdi) {
 	uartbone_write(ctx, CSR_LA_TRIGGER_MEM_MASK_ADDR, 0);
 	uartbone_write(ctx, CSR_LA_TRIGGER_MEM_VALUE_ADDR, 0);
 	uartbone_write(ctx, CSR_LA_TRIGGER_MEM_WRITE_ADDR, 1);
-	uartbone_write(ctx, CSR_LA_STORAGE_OFFSET_ADDR, 0);
-	uartbone_write(ctx, CSR_LA_STORAGE_LENGTH_ADDR, 4095);
 	uartbone_write(ctx, CSR_LA_SUBSAMPLER_VALUE_ADDR, 0);
 	uartbone_write(ctx, CSR_LA_HSPI_TX_MAX_PACKET_SIZE_ADDR, 4096);
 	uartbone_write(ctx, CSR_LA_HSPI_TX_MAX_PACKET_NUM_R_ADDR, 0);
 	uartbone_write(ctx, CSR_LA_HSPI_TX_ENABLE_ADDR, 1);
-	uartbone_write(ctx, CSR_LA_STORAGE_ENABLE_ADDR, 1);
 	uartbone_write(ctx, CSR_LA_TRIGGER_ENABLE_ADDR, 1);
 
 	return 0;
