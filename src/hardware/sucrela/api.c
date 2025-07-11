@@ -22,8 +22,6 @@ static const uint32_t devopts[] = {
 	SR_CONF_CONN | SR_CONF_GET,
 	SR_CONF_SAMPLERATE | SR_CONF_GET | SR_CONF_SET | SR_CONF_LIST,
 	SR_CONF_LIMIT_SAMPLES | SR_CONF_GET | SR_CONF_SET,
-	SR_CONF_CAPTURE_RATIO | SR_CONF_GET | SR_CONF_SET,
-	SR_CONF_LIMIT_FRAMES | SR_CONF_GET | SR_CONF_SET,
 };
 
 static const uint64_t samplerates[] = {
@@ -63,13 +61,6 @@ static int config_get(uint32_t key, GVariant **data,
        case SR_CONF_LIMIT_SAMPLES:
                 *data = g_variant_new_uint64(devc->limit_samples);
                 break;
-        case SR_CONF_CAPTURE_RATIO:
-                *data = g_variant_new_uint64(devc->capture_ratio);
-                break;
-	case SR_CONF_LIMIT_FRAMES:
-                *data = g_variant_new_uint64(devc->limit_frames);
-                break;
-
 	default:
 		return SR_ERR_NA;
 	}
@@ -93,13 +84,6 @@ static int config_set(uint32_t key, GVariant *data,
 	case SR_CONF_LIMIT_SAMPLES:
 		devc->limit_samples = g_variant_get_uint64(data);
 		break;
-        case SR_CONF_CAPTURE_RATIO:
-                devc->capture_ratio = g_variant_get_uint64(data);
-                break;
-	case SR_CONF_LIMIT_FRAMES:
-                devc->limit_frames = g_variant_get_uint64(data);
-                break;
-
 	default:
 		return SR_ERR_NA;
 	}

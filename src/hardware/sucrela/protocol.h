@@ -16,8 +16,6 @@ struct dev_context {
 	uint64_t dig_samplerate;
 	uint64_t limit_samples;
 	uint64_t sent_samples;
-	uint64_t capture_ratio;
-	uint64_t limit_frames;
 	uint64_t num_frames;
 	unsigned int num_transfers;
 	bool acq_aborted;

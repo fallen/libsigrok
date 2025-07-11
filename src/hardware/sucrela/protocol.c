@@ -155,8 +155,10 @@ static void LIBUSB_CALL receive_transfer(struct libusb_transfer *transfer)
                 resubmit_transfer(transfer);
                 return;
         }
-check_trigger:
-	if (devc->trigger_fired) {
+	sr_err("first sample values: %02x %02x %02x\n", transfer->buffer[0],
+	       transfer->buffer[1], transfer->buffer[2]);
+
+        if (devc->trigger_fired) {
                 if (!devc->limit_samples || devc->sent_samples < devc->limit_samples) {
                         /* Send the incoming transfer to the session bus. */
                         num_samples = cur_sample_count - processed_samples;
@@ -194,29 +196,12 @@ check_trigger:
 	}
 
 	const int frame_ended = devc->limit_samples && (devc->sent_samples >= devc->limit_samples);
-        const int final_frame = devc->limit_frames && (devc->num_frames >= (devc->limit_frames - 1));
 
         if (frame_ended) {
                 devc->num_frames++;
                 devc->sent_samples = 0;
                 devc->trigger_fired = FALSE;
                 std_session_send_df_frame_end(sdi);
-
-                /* There may be another trigger in the remaining data, go back and check for it */
-                if (processed_samples < cur_sample_count) {
-                        /* Reset the trigger stage */
-                        if (devc->stl)
-                                devc->stl->cur_stage = 0;
-                        else {
-                                std_session_send_df_frame_begin(sdi);
-                                devc->trigger_fired = TRUE;
-                        }
-                        if (!final_frame)
-                                goto check_trigger;
-                }
-        }
-
-	if (frame_ended && final_frame) {
                 sucrela_abort_acquisition(devc);
                 free_transfer(transfer);
         } else
@@ -253,9 +238,7 @@ SR_PRIV int dev_acquisition_start(const struct sr_dev_inst *sdi)
 	usb = sdi->conn;
 
         if ((trigger = sr_session_trigger_get(sdi->session))) {
-                int pre_trigger_samples = 0;
-                if (devc->limit_samples > 0)
-                        pre_trigger_samples = (devc->capture_ratio * devc->limit_samples) / 100;
+                int pre_trigger_samples = 0;;
                 devc->stl = soft_trigger_logic_new(sdi, trigger, pre_trigger_samples);
                 if (!devc->stl)
                         return SR_ERR_MALLOC;
