@@ -308,23 +308,31 @@ SR_PRIV int sucrela_dev_open(struct sr_dev_inst *sdi, struct sr_dev_driver *di)
                 return SR_ERR;
         }
         for (i = 0; i < device_count; i++) {
-                libusb_get_device_descriptor(devlist[i], &des);
+                ret = libusb_get_device_descriptor(devlist[i], &des);
+                if (ret) {
+			sr_err("Failed to get device descriptor: %s.",
+			       libusb_error_name(ret));
+                               continue;
+		}
 
                 if ((sdi->status == SR_ST_INITIALIZING) ||
                                 (sdi->status == SR_ST_INACTIVE)) {
                         /*
                          * Check device by its physical USB bus/port address.
                          */
-                        if (usb_get_port_path(devlist[i], connection_id, sizeof(connection_id)) < 0) {
+                        if (usb_get_port_path(devlist[i], connection_id, sizeof(connection_id)) != SR_OK) {
 				sr_err("failed to call usb_get_port_path\n");
                                 continue;
 			}
 
                         if (strcmp(sdi->connection_id, connection_id)) {
-				sr_err("bad conn id: %s\n", connection_id);
-                                /* This is not the one. */
+				sr_err("bad conn id: %s, looking for %s\n",
+				       connection_id, sdi->connection_id);
+				/* This is not the one. */
                                 continue;
-			}
+			} else {
+                                sr_err("Found it!\n");
+                        }
                 }
                 if ((ret = libusb_open(devlist[i], &usb->devhdl))) {
                         sr_err("Failed to open device: %s.",

@@ -175,15 +175,17 @@ static GSList *scan(struct sr_dev_driver *di, GSList *options)
 	struct drv_context *drvc;
 	struct dev_context *devc;
 	libusb_device **devlist;
-	GSList *devices, *conn_devices;
+	GSList *devices;
 	struct sr_dev_inst *sdi;
 	struct libusb_device_descriptor des;
 	char connection_id[64];
 	const char *conn;
 
+	sr_err("scan()\n");
+
 	drvc = di->context;
 	drvc->instances = NULL;
-	conn = NULL;
+	devices = NULL;
 
 	for (GSList *l = options; l; l = l->next) {
 		struct sr_config *src = l->data;
@@ -206,9 +208,10 @@ static GSList *scan(struct sr_dev_driver *di, GSList *options)
                         continue;
 
 
-		if (!scan_firmware(devlist[i]))
-			sr_info("Found a SucréLA device.");
-
+		if (scan_firmware(devlist[i]))
+			sr_err("Found a SucréLA device.");
+		else
+			continue;
 
 		sdi = g_malloc0(sizeof(struct sr_dev_inst));
 		sdi->status = SR_ST_INITIALIZING;
