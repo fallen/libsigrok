@@ -37,11 +37,32 @@ static const char *channel_names[] = {
 	"0", "1", "2", "3", "4", "5", "6", "7",
 };
 
+
+static char *key_to_str(uint32_t key)
+{
+	switch (key) {
+	case SR_CONF_SAMPLERATE:
+		return "SR_CONF_SAMPLERATE";
+	case SR_CONF_LIMIT_SAMPLES:
+		return "SR_CONF_LIMIT_SAMPLES";
+	case SR_CONF_CONN:
+		return "SR_CONF_CONN";
+	case SR_CONF_SCAN_OPTIONS:
+		return "SR_CONF_SCAN_OPTIONS";
+	case SR_CONF_DEVICE_OPTIONS:
+		return "SR_CONF_DEVICE_OPTIONS";
+	default:
+		return "unknown key ?!";
+	}
+}
+
 static int config_get(uint32_t key, GVariant **data,
 	const struct sr_dev_inst *sdi, const struct sr_channel_group *cg)
 {
 	struct sr_usb_dev_inst *usb;
 	struct dev_context *devc = sdi->priv;
+
+	sr_err("config_get(key=%s, sdi=%p)\n", key_to_str(key), sdi);
 
 	(void)cg;
 
@@ -73,6 +94,8 @@ static int config_set(uint32_t key, GVariant *data,
 {
 	struct dev_context *devc;
 
+	sr_err("config_set(key=%s, sdi=%p)\n", key_to_str(key), sdi);
+
 	(void)cg;
 
 	devc = sdi->priv;
@@ -94,6 +117,8 @@ static int config_set(uint32_t key, GVariant *data,
 static int config_list(uint32_t key, GVariant **data,
 	const struct sr_dev_inst *sdi, const struct sr_channel_group *cg)
 {
+	sr_err("config_list(key=%s, sdi=%p)\n", key_to_str(key), sdi);
+
 	switch (key) {
 	case SR_CONF_SCAN_OPTIONS:
 	case SR_CONF_DEVICE_OPTIONS:
@@ -202,17 +227,31 @@ static GSList *scan(struct sr_dev_driver *di, GSList *options)
 
 		devc = g_malloc0(sizeof(struct dev_context));
 		sdi->priv = devc;
+
+		for (unsigned int j = 0; j < 16; j++) {
+			sr_err("creating channel %d %s\n", j, channel_names[j]);
+			sr_channel_new(sdi, j, SR_CHANNEL_LOGIC, TRUE,
+				       channel_names[j]);
+		}
+
+
 		devices = g_slist_append(devices, sdi);
 	}
 
 	return std_scan_complete(di, devices);
 }
 
+SR_PRIV int sucrela_dev_open(
+	struct sr_dev_inst *sdi,
+	struct sr_dev_driver *di);
+
 static int dev_open(struct sr_dev_inst *sdi)
 {
 	int ret;
 	struct sr_usb_dev_inst *usb;
 	struct sr_dev_driver *di;
+
+	sr_err("dev_open()\n");
 
 	di = sdi->driver;
 	usb = sdi->conn;
@@ -242,12 +281,12 @@ static int dev_open(struct sr_dev_inst *sdi)
                 return SR_ERR;
         }
 
-	return ret;
+	return SR_OK;
 }
 
 static int sucrela_dev_close(struct sr_dev_inst *sdi)
 {
-
+	sr_err("sucrela_dev_close()\n");
 }
 
 static int dev_acquisition_stop(struct sr_dev_inst *sdi)
