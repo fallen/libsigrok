@@ -25,12 +25,14 @@ static int sucrela_start_sampling(const struct sr_dev_inst *sdi) {
 }
 
 SR_PRIV void sucrela_abort_acquisition(struct dev_context *devc)      
-{       
-        int i;
-        
-        devc->acq_aborted = TRUE;                                     
-        
-        for (i = devc->num_transfers - 1; i >= 0; i--) {              
+{
+	struct uartbone_ctx *ctx = devc->uartbone_ctx;
+	int i;
+
+	devc->acq_aborted = TRUE;
+
+	uartbone_write(ctx, CSR_LA_HSPI_TX_ENABLE_ADDR, 0);
+	for (i = devc->num_transfers - 1; i >= 0; i--) {
                 if (devc->transfers[i])                               
                         libusb_cancel_transfer(devc->transfers[i]);   
         }
@@ -247,14 +249,15 @@ SR_PRIV int dev_acquisition_start(const struct sr_dev_inst *sdi)
 
 	devc->sent_samples = 0;
         devc->acq_aborted = FALSE;
-	devc->num_transfers = 1;
-	devc->transfers = g_malloc0(sizeof(*devc->transfers) * 100);
+	devc->num_transfers = 16;
+	devc->transfers =
+		g_malloc0(sizeof(*devc->transfers) * devc->num_transfers);
 	for (i = 0; i < devc->num_transfers; i++) {
 		buf = g_malloc(BUF_SIZE);
 		transfer = libusb_alloc_transfer(0);
 		libusb_fill_bulk_transfer(transfer, usb->devhdl,
-			2 | LIBUSB_ENDPOINT_IN, buf, BUF_SIZE,
-			receive_transfer, (void *)sdi, 0);
+					  2 | LIBUSB_ENDPOINT_IN, buf, BUF_SIZE,
+					  receive_transfer, (void *)sdi, 0);
 		if ((ret = libusb_submit_transfer(transfer)) != 0) {
 			sr_err("Failed to submit transfer: %s.",
 			       libusb_error_name(ret));
