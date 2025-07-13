@@ -34,7 +34,8 @@ static const uint64_t samplerates[] = {
 };
 
 static const char *channel_names[] = {
-	"0", "1", "2", "3", "4", "5", "6", "7",
+	"0", "1", "2",	"3",  "4",  "5",  "6",	"7",
+	"8", "9", "10", "11", "12", "13", "14", "15",
 };
 
 
@@ -215,11 +216,6 @@ static GSList *scan(struct sr_dev_driver *di, GSList *options)
 		sdi->model = g_strdup("SucréLA");
 		sdi->connection_id = g_strdup(connection_id);
 
-		for (unsigned int j = 0; j < ARRAY_SIZE(channel_names); j++)
-			sr_channel_new(sdi, j, SR_CHANNEL_LOGIC, TRUE,
-				       channel_names[j]);
-
-		sr_dbg("Found a SucréLA device.");
 		sdi->status = SR_ST_INACTIVE;
 		sdi->inst_type = SR_INST_USB;
 		sdi->conn = sr_usb_dev_inst_new(libusb_get_bus_number(devlist[i]),
