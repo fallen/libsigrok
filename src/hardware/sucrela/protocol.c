@@ -8,6 +8,8 @@
 #include "protocol.h"
 #include "csr.h"
 
+uint8_t sucrela_stop_capture = 0;
+
 static int sucrela_start_sampling(const struct sr_dev_inst *sdi) {
 	struct dev_context *devc = sdi->priv;
 	struct uartbone_ctx *ctx = devc->uartbone_ctx;
@@ -28,10 +30,16 @@ SR_PRIV void sucrela_abort_acquisition(struct dev_context *devc)
 {
 	struct uartbone_ctx *ctx = devc->uartbone_ctx;
 	int i;
+        uint32_t hspi_tx_enable;
+
+	sr_err("sucrela_abort_acquisition()\n");
 
 	devc->acq_aborted = TRUE;
-
 	uartbone_write(ctx, CSR_LA_HSPI_TX_ENABLE_ADDR, 0);
+	hspi_tx_enable = uartbone_read(ctx, CSR_LA_HSPI_TX_ENABLE_ADDR);
+        if (hspi_tx_enable != 0)
+                sr_err("Could not stop the transfers\n");
+
 	for (i = devc->num_transfers - 1; i >= 0; i--) {
                 if (devc->transfers[i])                               
                         libusb_cancel_transfer(devc->transfers[i]);   
@@ -135,15 +143,16 @@ static void LIBUSB_CALL receive_transfer(struct libusb_transfer *transfer)
 	sr_err("receive_transfer(): status %s received %d bytes.", libusb_error_name(transfer->status), transfer->actual_length);
 	unitsize = 1;
 	cur_sample_count = transfer->actual_length / unitsize;
+        processed_samples = 0;
 
 	switch (transfer->status) {
         case LIBUSB_TRANSFER_NO_DEVICE:
-                sucrela_abort_acquisition(devc);
+                sucrela_stop_capture = 1;
                 free_transfer(transfer);
                 return;
         case LIBUSB_TRANSFER_COMPLETED:
         case LIBUSB_TRANSFER_TIMED_OUT: /* We may have received some data though. */
-                break;
+		break;
         default:
                 packet_has_error = TRUE;
                 break;
@@ -197,15 +206,17 @@ static void LIBUSB_CALL receive_transfer(struct libusb_transfer *transfer)
 	const int frame_ended = devc->limit_samples && (devc->sent_samples >= devc->limit_samples);
 
         if (frame_ended) {
-                devc->num_frames++;
+		sucrela_stop_capture = 1;
+		sr_err("End of frame!\n");
+		devc->num_frames++;
                 devc->sent_samples = 0;
                 devc->trigger_fired = FALSE;
                 std_session_send_df_frame_end(sdi);
-                sucrela_abort_acquisition(devc);
-                free_transfer(transfer);
-        } else
-                resubmit_transfer(transfer);
-
+		resubmit_transfer(transfer); // we still need to process USB until capture is really stopped
+	} else {
+                sr_err("resubmit !\n");
+		resubmit_transfer(transfer);
+	}
 }
 
 static int receive_data(int fd, int revents, void *cb_data)
@@ -213,13 +224,18 @@ static int receive_data(int fd, int revents, void *cb_data)
 	struct sr_dev_inst *sdi = cb_data;
 	struct drv_context *drvc = sdi->driver->context;
 	struct timeval tv;
+	struct dev_context *devc = sdi->priv;
 
 	(void)fd;
 
-	sr_err("we RX data!\n");
+	//sr_err("we RX data!\n");
+
+        if (sucrela_stop_capture) {
+		sucrela_abort_acquisition(devc);
+	}
 
 	tv.tv_sec = tv.tv_usec = 0;
-	libusb_handle_events_timeout(drvc->sr_ctx->libusb_ctx, &tv);
+	libusb_handle_events_timeout_completed(drvc->sr_ctx->libusb_ctx, &tv, NULL);
 
 	return TRUE;
 }
@@ -249,7 +265,7 @@ SR_PRIV int dev_acquisition_start(const struct sr_dev_inst *sdi)
 
 	devc->sent_samples = 0;
         devc->acq_aborted = FALSE;
-	devc->num_transfers = 16;
+	devc->num_transfers = 32;
 	devc->transfers =
 		g_malloc0(sizeof(*devc->transfers) * devc->num_transfers);
 	for (i = 0; i < devc->num_transfers; i++) {
@@ -371,21 +387,16 @@ SR_PRIV int sucrela_dev_open(struct sr_dev_inst *sdi, struct sr_dev_driver *di)
 
 	memset(channels_to_remove, 0, sizeof(channels_to_remove));
 
-        for (i = 0, j = devc->probe_number; j < 16; j++, i++) {
+	for (j = 15; j >= devc->probe_number; j--) {
 		ch = g_slist_nth(sdi->channels, j)->data;
+                sdi->channels = g_slist_remove(sdi->channels, ch);
 		sr_err("removing channel %d %s\n", j,
 		       ch->name);
-		channels_to_remove[i] = ch;
-	}
-
-	for (i = 0, ch = channels_to_remove[0]; ch; i++) {
-		ch = channels_to_remove[i];
-                sdi->channels = g_slist_remove(sdi->channels, ch);
 	}
 
 	// Create samplerate array
-	for (i = 1; i <= NUM_SAMPLERATES; i++) {
-		devc->samplerates[i-1] = max_samplerate / (2*i);
+	for (i = 0; i < NUM_SAMPLERATES; i++) {
+		devc->samplerates[i] = max_samplerate >> i;
 	}
 
 	i = 0;

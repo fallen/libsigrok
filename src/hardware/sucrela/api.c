@@ -215,7 +215,7 @@ static GSList *scan(struct sr_dev_driver *di, GSList *options)
 
 		sdi = g_malloc0(sizeof(struct sr_dev_inst));
 		sdi->status = SR_ST_INITIALIZING;
-		sdi->vendor = g_strdup("Yann Sionneau");
+		sdi->vendor = g_strdup("YS");
 		sdi->model = g_strdup("SucréLA");
 		sdi->connection_id = g_strdup(connection_id);
 
