@@ -13,8 +13,36 @@ uint8_t sucrela_stop_capture = 0;
 static int sucrela_start_sampling(const struct sr_dev_inst *sdi) {
 	struct dev_context *devc = sdi->priv;
 	struct uartbone_ctx *ctx = devc->uartbone_ctx;
-	
-	uartbone_write(ctx, CSR_LA_TRIGGER_MEM_MASK_ADDR, 0);
+	uint8_t oversampler_phy_ratio; // max possible oversampling
+
+        sr_err("max_samplerate: %d\n", devc->max_samplerate);
+        sr_err("cur samplerate: %d\n", devc->dig_samplerate);
+
+	oversampler_phy_ratio =
+		uartbone_read(ctx, CSR_LA_OVERSAMPLER_PHY_RATIO_ADDR);
+        sr_err("oversampler phy ratio: %d\n", oversampler_phy_ratio);
+        if (devc->dig_samplerate == 2 * devc->max_samplerate) {
+                // Let's enable DDRx1 inputs
+		if (oversampler_phy_ratio < 2) {
+                        sr_err("ERROR: Impossible to oversample, oversampler is synthesized with phy_ratio of 1 in the SoC\n");
+                        return -1;
+                }
+		sr_err("oversampling x2\n");
+		uartbone_write(ctx, CSR_LA_OVERSAMPLER_RATIO_ADDR, 2);
+	} else if (devc->dig_samplerate == 4 * devc->max_samplerate) {
+		if (oversampler_phy_ratio < 4) {
+			sr_err("ERROR: Impossible to oversample, oversampler is synthesized with phy_ratio of %d in the SoC\n",
+			       oversampler_phy_ratio);
+			return -1;
+		}
+                sr_err("oversampling x4\n");
+		uartbone_write(ctx, CSR_LA_OVERSAMPLER_RATIO_ADDR, 4);
+	} else {
+                sr_err("no oversampling\n");
+		uartbone_write(ctx, CSR_LA_OVERSAMPLER_RATIO_ADDR, 1);
+	}
+
+        uartbone_write(ctx, CSR_LA_TRIGGER_MEM_MASK_ADDR, 0);
 	uartbone_write(ctx, CSR_LA_TRIGGER_MEM_VALUE_ADDR, 0);
 	uartbone_write(ctx, CSR_LA_TRIGGER_MEM_WRITE_ADDR, 1);
 	uartbone_write(ctx, CSR_LA_SUBSAMPLER_VALUE_ADDR, 0);
@@ -121,15 +149,15 @@ static void resubmit_transfer(struct libusb_transfer *transfer)
 
 static void LIBUSB_CALL receive_transfer(struct libusb_transfer *transfer)
 {
-        struct sr_dev_inst *sdi;
-        struct dev_context *devc;
+        struct sr_dev_inst *sdi = transfer->user_data;
+        struct dev_context *devc = sdi->priv;
 	gboolean packet_has_error = FALSE;
 	unsigned int num_samples;
 	int trigger_offset, cur_sample_count, unitsize, processed_samples;
 	int pre_trigger_samples;
-
-        sdi = transfer->user_data;
-        devc = sdi->priv;
+	int oversampling = devc->dig_samplerate > devc->max_samplerate;
+	int oversampling_ratio = devc->dig_samplerate / devc->max_samplerate;
+        char *buffer;
 
         /*
          * If acquisition has already ended, just free any queued up
@@ -142,7 +170,6 @@ static void LIBUSB_CALL receive_transfer(struct libusb_transfer *transfer)
 
 	sr_err("receive_transfer(): status %s received %d bytes.", libusb_error_name(transfer->status), transfer->actual_length);
 	unitsize = 1;
-	cur_sample_count = transfer->actual_length / unitsize;
         processed_samples = 0;
 
 	switch (transfer->status) {
@@ -163,8 +190,28 @@ static void LIBUSB_CALL receive_transfer(struct libusb_transfer *transfer)
                 resubmit_transfer(transfer);
                 return;
         }
-	sr_err("first sample values: %02x %02x %02x\n", transfer->buffer[0],
-	       transfer->buffer[1], transfer->buffer[2]);
+
+        cur_sample_count = transfer->actual_length / unitsize;
+        if (!oversampling)
+                buffer = transfer->buffer;
+        else {
+                cur_sample_count *= oversampling_ratio;
+                buffer = g_malloc(transfer->actual_length * oversampling_ratio);
+                if (oversampling_ratio == 2) {
+                        for (unsigned int i = 0; i < transfer->actual_length; i++) {
+                                buffer[2*i] = transfer->buffer[i] & 0x0f;
+                                buffer[2*i+1] = (transfer->buffer[i] & 0xf0) >> 4;
+                        }
+                }
+                if (oversampling_ratio == 4) {
+                        for (unsigned int i = 0; i < transfer->actual_length; i++) {
+                                buffer[4*i] = transfer->buffer[i] & 0x03;
+                                buffer[4*i+1] = (transfer->buffer[i] & 0x0c) >> 2;
+                                buffer[4*i+2] = (transfer->buffer[i] & 0x30) >> 4;
+                                buffer[4*i+3] = (transfer->buffer[i] & 0xc0) >> 6;
+                        }
+                }
+        }
 
         if (devc->trigger_fired) {
                 if (!devc->limit_samples || devc->sent_samples < devc->limit_samples) {
@@ -173,14 +220,14 @@ static void LIBUSB_CALL receive_transfer(struct libusb_transfer *transfer)
                         if (devc->limit_samples && devc->sent_samples + num_samples > devc->limit_samples)
                                 num_samples = devc->limit_samples - devc->sent_samples;
 
-                        sucrela_send_data_proc(sdi, (uint8_t *)transfer->buffer + processed_samples * unitsize,
+                        sucrela_send_data_proc(sdi, (uint8_t *)buffer + processed_samples * unitsize,
                                 num_samples * unitsize, unitsize);
                         devc->sent_samples += num_samples;
                         processed_samples += num_samples;
                 }
         } else {
 		trigger_offset = soft_trigger_logic_check(devc->stl,
-			transfer->buffer + processed_samples * unitsize,
+			buffer + processed_samples * unitsize,
 			transfer->actual_length - processed_samples * unitsize,
 			&pre_trigger_samples);
 
@@ -192,7 +239,7 @@ static void LIBUSB_CALL receive_transfer(struct libusb_transfer *transfer)
 					devc->sent_samples + num_samples > devc->limit_samples)
 				num_samples = devc->limit_samples - devc->sent_samples;
 
-			sucrela_send_data_proc(sdi, (uint8_t *)transfer->buffer
+			sucrela_send_data_proc(sdi, (uint8_t *)buffer
 					+ processed_samples * unitsize
 					+ trigger_offset * unitsize,
 					num_samples * unitsize, unitsize);
@@ -217,6 +264,8 @@ static void LIBUSB_CALL receive_transfer(struct libusb_transfer *transfer)
                 sr_err("resubmit !\n");
 		resubmit_transfer(transfer);
 	}
+        if (oversampling)
+                g_free(buffer);
 }
 
 static int receive_data(int fd, int revents, void *cb_data)
@@ -290,7 +339,7 @@ SR_PRIV int dev_acquisition_start(const struct sr_dev_inst *sdi)
 
 	std_session_send_df_header(sdi);
 
-	sucrela_start_sampling(sdi);
+	ret = sucrela_start_sampling(sdi);
 
 	return ret;
 }
@@ -377,12 +426,12 @@ SR_PRIV int sucrela_dev_open(struct sr_dev_inst *sdi, struct sr_dev_driver *di)
 	uartbone_unix_init(devc->uartbone_ctx, "usb://", 0, 4);
 	libusb_free_device_list(devlist, 1);
 
-	max_samplerate = uartbone_read(devc->uartbone_ctx, CSR_LA_SAMPLERATE_ADDR);
+	devc->max_samplerate = uartbone_read(devc->uartbone_ctx, CSR_LA_SAMPLERATE_ADDR);
 	hspi_width = uartbone_read(devc->uartbone_ctx,
 				   CSR_LA_HSPI_TX_HSPI_WIDTH_R_ADDR);
 	devc->probe_number = uartbone_read(devc->uartbone_ctx, CSR_LA_NUM_PROBES_ADDR);
-        sr_err("max_samplerate: %d\n", max_samplerate);
-        sr_err("hspi_width: %d\n", hspi_width);
+	sr_err("max_samplerate: %d\n", devc->max_samplerate);
+	sr_err("hspi_width: %d\n", hspi_width);
         sr_err("probe_number: %d\n", devc->probe_number);
 
 	memset(channels_to_remove, 0, sizeof(channels_to_remove));
@@ -396,7 +445,7 @@ SR_PRIV int sucrela_dev_open(struct sr_dev_inst *sdi, struct sr_dev_driver *di)
 
 	// Create samplerate array
 	for (i = 0; i < NUM_SAMPLERATES; i++) {
-		devc->samplerates[i] = max_samplerate >> i;
+		devc->samplerates[i] = devc->max_samplerate >> i;
 	}
 
 	i = 0;

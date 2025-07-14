@@ -25,7 +25,9 @@ static const uint32_t devopts[] = {
 };
 
 static const uint64_t samplerates[] = {
-	SR_MHZ(1),
+	SR_MHZ(16),
+	SR_MHZ(8),
+	SR_MHZ(4),
 	SR_MHZ(2),
 	SR_KHZ(2500),
 	SR_MHZ(10),
@@ -104,6 +106,7 @@ static int config_set(uint32_t key, GVariant *data,
 	switch (key) {
 	case SR_CONF_SAMPLERATE:
 		devc->dig_samplerate = g_variant_get_uint64(data);
+		sr_err("set to %d\n", devc->dig_samplerate);
 		break;
 	case SR_CONF_LIMIT_SAMPLES:
 		devc->limit_samples = g_variant_get_uint64(data);
