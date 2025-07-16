@@ -18,21 +18,35 @@ static const uint32_t drvopts[] = {
 };
 
 static const uint32_t devopts[] = {
-	SR_CONF_CONTINUOUS,
+	SR_CONF_CONTINUOUS | SR_CONF_GET | SR_CONF_SET,
 	SR_CONF_CONN | SR_CONF_GET,
 	SR_CONF_SAMPLERATE | SR_CONF_GET | SR_CONF_SET | SR_CONF_LIST,
 	SR_CONF_LIMIT_SAMPLES | SR_CONF_GET | SR_CONF_SET,
+	SR_CONF_VOLTAGE_THRESHOLD | SR_CONF_GET | SR_CONF_SET | SR_CONF_LIST,
+	SR_CONF_TRIGGER_MATCH | SR_CONF_LIST,
 };
+
+static const int32_t trigger_matches[] = {
+	SR_TRIGGER_ZERO,
+	SR_TRIGGER_ONE,
+	SR_TRIGGER_RISING,
+	SR_TRIGGER_FALLING,
+};
+
+static const double threshold_ranges[][2] = {
+	{ 3.3, 3.3},
+};
+
 
 static const uint64_t samplerates[] = {
 	SR_MHZ(16),
 	SR_MHZ(8),
 	SR_MHZ(4),
 	SR_MHZ(2),
-	SR_KHZ(2500),
-	SR_MHZ(10),
-	SR_MHZ(25),
-	SR_MHZ(50),
+	SR_MHZ(1),
+	SR_KHZ(500),
+	SR_KHZ(250),
+	SR_KHZ(125),
 };
 
 static const char *channel_names[] = {
@@ -54,7 +68,14 @@ static char *key_to_str(uint32_t key)
 		return "SR_CONF_SCAN_OPTIONS";
 	case SR_CONF_DEVICE_OPTIONS:
 		return "SR_CONF_DEVICE_OPTIONS";
+	case SR_CONF_TRIGGER_MATCH:
+		return "SR_CONF_TRIGGER_MATCH";
+	case SR_CONF_VOLTAGE_THRESHOLD:
+		return "SR_CONF_VOLTAGE_THRESHOLD";
+	case SR_CONF_CONTINUOUS:
+		return "SR_CONF_CONTINUOUS";
 	default:
+		sr_err("unknown key: %d\n", key);
 		return "unknown key ?!";
 	}
 }
@@ -82,9 +103,16 @@ static int config_get(uint32_t key, GVariant **data,
 		devc = sdi->priv;
 		*data = g_variant_new_uint64(devc->dig_samplerate);
 		break;
-       case SR_CONF_LIMIT_SAMPLES:
-                *data = g_variant_new_uint64(devc->limit_samples);
-                break;
+	case SR_CONF_LIMIT_SAMPLES:
+		*data = g_variant_new_uint64(devc->limit_samples);
+		break;
+	case SR_CONF_VOLTAGE_THRESHOLD:
+		*data = std_gvar_tuple_double(3.3, 3.3);
+		break;
+	case SR_CONF_CONTINUOUS:
+		*data = g_variant_new_boolean(devc->continuous);
+		break;
+
 	default:
 		return SR_ERR_NA;
 	}
@@ -92,24 +120,58 @@ static int config_get(uint32_t key, GVariant **data,
 	return SR_OK;
 }
 
+static void update_probe_number(const struct sr_dev_inst *sdi) {
+	struct dev_context *devc = sdi->priv;
+
+	if (devc->oversampling_ratio == 1)
+		return;
+}
+
 static int config_set(uint32_t key, GVariant *data,
 	const struct sr_dev_inst *sdi, const struct sr_channel_group *cg)
 {
-	struct dev_context *devc;
+	struct dev_context *devc = sdi->priv;
+	int idx;
 
 	sr_err("config_set(key=%s, sdi=%p)\n", key_to_str(key), sdi);
 
 	(void)cg;
 
-	devc = sdi->priv;
-
 	switch (key) {
 	case SR_CONF_SAMPLERATE:
 		devc->dig_samplerate = g_variant_get_uint64(data);
 		sr_err("set to %d\n", devc->dig_samplerate);
+		devc->oversampling_ratio = 1;
+		if (devc->dig_samplerate == 2 * devc->max_samplerate) {
+			// Let's enable DDRx1 inputs
+			if (devc->oversampler_phy_ratio < 2) {
+				sr_err("ERROR: Impossible to oversample, oversampler is synthesized with phy_ratio of 1 in the SoC\n");
+				return SR_ERR_SAMPLERATE;
+			}
+			sr_err("oversampling x2\n");
+			devc->oversampling_ratio = 2;
+		}
+		if (devc->dig_samplerate == 4 * devc->max_samplerate) {
+			// Let's enable DDRx2 inputs
+			if (devc->oversampler_phy_ratio < 4) {
+				sr_err("ERROR: Impossible to oversample, oversampler is synthesized with phy_ratio of %d in the SoC\n", devc->oversampler_phy_ratio);
+				return SR_ERR_SAMPLERATE;
+			}
+			sr_err("oversampling x4\n");
+			devc->oversampling_ratio = 4;
+		}
+		update_probe_number(sdi);
 		break;
 	case SR_CONF_LIMIT_SAMPLES:
 		devc->limit_samples = g_variant_get_uint64(data);
+		break;
+	case SR_CONF_VOLTAGE_THRESHOLD:
+		idx = std_double_tuple_idx(data, ARRAY_AND_SIZE(threshold_ranges));
+		if (idx < 0)
+			return SR_ERR_ARG;
+		break;
+	case SR_CONF_CONTINUOUS:
+		devc->continuous = g_variant_get_boolean(data);
 		break;
 	default:
 		return SR_ERR_NA;
@@ -129,6 +191,12 @@ static int config_list(uint32_t key, GVariant **data,
 		return STD_CONFIG_LIST(key, data, sdi, cg, scanopts, drvopts, devopts);
 	case SR_CONF_SAMPLERATE:
 		*data = std_gvar_samplerates(ARRAY_AND_SIZE(samplerates));
+		break;
+	case SR_CONF_TRIGGER_MATCH:
+		*data = std_gvar_array_i32(ARRAY_AND_SIZE(trigger_matches));
+		break;
+	case SR_CONF_VOLTAGE_THRESHOLD:
+		*data = std_gvar_thresholds(ARRAY_AND_SIZE(threshold_ranges));
 		break;
 	default:
 		return SR_ERR_NA;
@@ -207,8 +275,8 @@ static GSList *scan(struct sr_dev_driver *di, GSList *options)
 		if (des.idVendor != 0x16c0 || des.idProduct != 0x05dc)
 			continue;
 
-                if (usb_get_port_path(devlist[i], connection_id, sizeof(connection_id)) < 0)
-                        continue;
+		if (usb_get_port_path(devlist[i], connection_id, sizeof(connection_id)) < 0)
+			continue;
 
 
 		if (scan_firmware(devlist[i]))
@@ -264,24 +332,24 @@ static int dev_open(struct sr_dev_inst *sdi)
 		return SR_ERR;
 	}
 
-        ret = libusb_claim_interface(usb->devhdl, USB_INTERFACE);
-        if (ret != 0) {
-                switch (ret) {
-                case LIBUSB_ERROR_BUSY:
-                        sr_err("Unable to claim USB interface. Another "
-                               "program or driver has already claimed it.");
-                        break;
-                case LIBUSB_ERROR_NO_DEVICE:
-                        sr_err("Device has been disconnected.");
-                        break;
-                default:
-                        sr_err("Unable to claim interface: %s.",
-                               libusb_error_name(ret));
-                        break;
-                }
+	ret = libusb_claim_interface(usb->devhdl, USB_INTERFACE);
+	if (ret != 0) {
+		switch (ret) {
+		case LIBUSB_ERROR_BUSY:
+			sr_err("Unable to claim USB interface. Another "
+			       "program or driver has already claimed it.");
+			break;
+		case LIBUSB_ERROR_NO_DEVICE:
+			sr_err("Device has been disconnected.");
+			break;
+		default:
+			sr_err("Unable to claim interface: %s.",
+			       libusb_error_name(ret));
+			break;
+		}
 
-                return SR_ERR;
-        }
+		return SR_ERR;
+	}
 
 	return SR_OK;
 }
