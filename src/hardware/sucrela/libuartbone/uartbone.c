@@ -30,6 +30,11 @@
 #define CMD_WRITE_BURST_FIXED   3
 #define CMD_READ_BURST_FIXED    4
 
+static int uart_send(struct uartbone_ctx *ctx, uint8_t *buffer, size_t length);
+static int uart_recv(struct uartbone_ctx *ctx, uint8_t *buffer, size_t length);
+static void uartbone_flush(struct uartbone_ctx *ctx);
+static uint64_t to_bigendian(struct uartbone_ctx *ctx, uint64_t val);
+
 union wb_val_32 {
     uint32_t val;
     uint8_t buff[4];
@@ -40,7 +45,7 @@ union wb_val_64 {
     uint8_t buff[8];
 };
 
-int uart_send(struct uartbone_ctx *ctx, uint8_t *buffer, size_t length) {
+static int uart_send(struct uartbone_ctx *ctx, uint8_t *buffer, size_t length) {
     return ctx->uart->write(ctx, buffer, length);
 }
 
@@ -49,10 +54,10 @@ int uart_recv(struct uartbone_ctx *ctx, uint8_t *buffer, size_t length) {
 }
 
 void uartbone_flush(struct uartbone_ctx *ctx) {
-    //ctx->uart->flush();
+    (void)ctx;
 }
 
-uint64_t to_bigendian(struct uartbone_ctx *ctx, uint64_t val) {
+static uint64_t to_bigendian(struct uartbone_ctx *ctx, uint64_t val) {
     uint64_t newval;
 
     switch(ctx->addr_width) {
@@ -70,6 +75,9 @@ uint64_t to_bigendian(struct uartbone_ctx *ctx, uint64_t val) {
 
         case 8:
             newval = htobe64(val);
+            break;
+        default:
+            __builtin_unreachable();
     }
 
     return newval;
