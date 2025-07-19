@@ -22,7 +22,7 @@ struct uartbone_ctx;
 struct uart_backend {
     enum uart_backend_type type;
     int (*read)(struct uartbone_ctx *ctx, uint8_t *data, size_t len);
-    void (*write)(struct uartbone_ctx *ctx, uint8_t *data, size_t len);
+    int (*write)(struct uartbone_ctx *ctx, uint8_t *data, size_t len);
     void (*flush)(void);
 };
 
@@ -40,9 +40,9 @@ struct uartbone_ctx {
 };
 
 int get_reg_addr(FILE *csv, char *reg_name, uint32_t *res);
-uint32_t uartbone_read(struct uartbone_ctx *ctx, uint64_t addr);
+int uartbone_read(struct uartbone_ctx *ctx, uint64_t addr, uint32_t *data);
 void uartbone_unix_init(struct uartbone_ctx *ctx, char *file, unsigned int baudrate, unsigned int addr_width);
-void uartbone_write(struct uartbone_ctx *ctx, uint64_t addr, uint32_t val);
+int uartbone_write(struct uartbone_ctx *ctx, uint64_t addr, uint32_t val);
 
 static inline bool ctx_uses_usb(struct uartbone_ctx *ctx) {
     return ctx && ctx->uart && ctx->uart->type == UNIX_USB;

@@ -40,12 +40,12 @@ union wb_val_64 {
     uint8_t buff[8];
 };
 
-void uart_send(struct uartbone_ctx *ctx, uint8_t *buffer, size_t length) {
-    ctx->uart->write(ctx, buffer, length);
+int uart_send(struct uartbone_ctx *ctx, uint8_t *buffer, size_t length) {
+    return ctx->uart->write(ctx, buffer, length);
 }
 
-void uart_recv(struct uartbone_ctx *ctx, uint8_t *buffer, size_t length) {
-    ctx->uart->read(ctx, buffer, length);
+int uart_recv(struct uartbone_ctx *ctx, uint8_t *buffer, size_t length) {
+    return ctx->uart->read(ctx, buffer, length);
 }
 
 void uartbone_flush(struct uartbone_ctx *ctx) {
@@ -75,11 +75,12 @@ uint64_t to_bigendian(struct uartbone_ctx *ctx, uint64_t val) {
     return newval;
 }
 
-uint32_t uartbone_read(struct uartbone_ctx *ctx, uint64_t addr) {
+int uartbone_read(struct uartbone_ctx *ctx, uint64_t addr, uint32_t *data) {
     size_t cmd_length = ctx->addr_width + 2;
     unsigned char buffer[MAX_CMD_LENGTH];
     union wb_val_32 wbval;
     union wb_val_64 wbaddr;
+    int ret;
 
     buffer[0] = CMD_READ_BURST_FIXED;
     buffer[1] = 1;
@@ -87,20 +88,26 @@ uint32_t uartbone_read(struct uartbone_ctx *ctx, uint64_t addr) {
     uartbone_flush(ctx);
     wbaddr.val = to_bigendian(ctx, addr >> 2);
     memcpy(&buffer[2], wbaddr.buff, ctx->addr_width);
-    uart_send(ctx, buffer, cmd_length);
-    uart_recv(ctx, wbval.buff, 4);
+    ret = uart_send(ctx, buffer, cmd_length);
+    if (ret)
+        return ret;
+    ret = uart_recv(ctx, wbval.buff, 4);
+    if (ret)
+        return ret;
     //printf("wbval.val = %08x\n", wbval.val);
     wbval.val = be32toh(wbval.val);
     //printf("we return %08x\n", wbval.val);
 
-    return wbval.val;
+    *data = wbval.val;
+    return ret;
 }
 
-void uartbone_write(struct uartbone_ctx *ctx, uint64_t addr, uint32_t val) {
+int uartbone_write(struct uartbone_ctx *ctx, uint64_t addr, uint32_t val) {
     size_t cmd_length = ctx->addr_width + 2;
     unsigned char buffer[MAX_CMD_LENGTH];
     union wb_val_32 wbval;
     union wb_val_64 wbaddr;
+    int ret;
 
     buffer[0] = CMD_WRITE_BURST_FIXED;
     buffer[1] = 1;
@@ -109,6 +116,10 @@ void uartbone_write(struct uartbone_ctx *ctx, uint64_t addr, uint32_t val) {
     wbval.val = to_bigendian(ctx, val);;
     wbaddr.val = to_bigendian(ctx, addr >> 2); // address must be shifted by 2 bits
     memcpy(&buffer[2], wbaddr.buff, ctx->addr_width);
-    uart_send(ctx, buffer, cmd_length);
-    uart_send(ctx, wbval.buff, 4);
+    ret = uart_send(ctx, buffer, cmd_length);
+    if (ret)
+        return ret;
+
+    ret = uart_send(ctx, wbval.buff, 4);
+    return ret;
 }

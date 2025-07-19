@@ -357,11 +357,13 @@ static int dev_open(struct sr_dev_inst *sdi)
 static int sucrela_dev_close(struct sr_dev_inst *sdi)
 {
 	sr_err("sucrela_dev_close()\n");
+	(void)sdi;
+	return SR_OK;
 }
 
 static int dev_acquisition_stop(struct sr_dev_inst *sdi)
 {
-	sucrela_abort_acquisition(sdi->priv);
+	return sucrela_abort_acquisition(sdi->priv);
 }
 
 static struct sr_dev_driver sucrela_driver_info = {

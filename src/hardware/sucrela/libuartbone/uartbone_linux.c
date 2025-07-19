@@ -119,7 +119,7 @@ static speed_t baudrate_to_speed(unsigned int baudrate) {
     }
 }
 
-void uart_write(struct uartbone_ctx *ctx, uint8_t *data, size_t len) {
+int uart_write(struct uartbone_ctx *ctx, uint8_t *data, size_t len) {
     ssize_t ret;
     size_t cur_pos = 0;
 
@@ -131,10 +131,11 @@ void uart_write(struct uartbone_ctx *ctx, uint8_t *data, size_t len) {
         }
         cur_pos += ret;
     }
+    return 0;
 }
 
 int uart_read(struct uartbone_ctx *ctx, uint8_t *res, size_t len) {
-    ssize_t ret;
+    ssize_t ret = 0;
     size_t cur_pos = 0;
 
     while (cur_pos != len) {
@@ -148,7 +149,7 @@ int uart_read(struct uartbone_ctx *ctx, uint8_t *res, size_t len) {
     return ret;
 }
 
-void usb_write(struct uartbone_ctx *ctx, uint8_t *data, size_t len) {
+int usb_write(struct uartbone_ctx *ctx, uint8_t *data, size_t len) {
     uint8_t *usb_buffer;
     int ret;
     int transferred;
@@ -169,11 +170,17 @@ void usb_write(struct uartbone_ctx *ctx, uint8_t *data, size_t len) {
 
     ret = libusb_bulk_transfer((libusb_device_handle *)ctx->usb_handle, ctx->endpoint, usb_buffer, usb_tx_len, &transferred, 5000);
     free(usb_buffer);
-    if (ret)
+    if (ret) {
         printf("libusb_bulk_transfer error %d: %s\n", ret, libusb_error_name(ret));
+        return ret;
+    }
 
-    if (transferred != usb_tx_len)
+    if (transferred != usb_tx_len) {
         printf("error, libusb_bulk_transfer transferred %d instead of %d\n", transferred, usb_tx_len);
+        return -1;
+    }
+
+    return 0;
  }
 
 int usb_read(struct uartbone_ctx *ctx, uint8_t *res, size_t len) {
@@ -190,7 +197,7 @@ int usb_read(struct uartbone_ctx *ctx, uint8_t *res, size_t len) {
     ret = libusb_bulk_transfer((libusb_device_handle *)ctx->usb_handle, ctx->endpoint, tmpbuf, sizeof(tmpbuf), &transferred, 5000);
     if (ret) {
         printf("libusb_bulk_transfer error %d: %s\n", ret, libusb_error_name(ret));
-        return -1;
+        return ret;
     }
 
     if (transferred != sizeof(tmpbuf)) {
@@ -205,7 +212,7 @@ int usb_read(struct uartbone_ctx *ctx, uint8_t *res, size_t len) {
     ret = libusb_bulk_transfer((libusb_device_handle *)ctx->usb_handle, ctx->endpoint | LIBUSB_ENDPOINT_IN, usb_buffer, 1024, &transferred, 5000);
     if (ret) {
         printf("libusb_bulk_transfer error %d: %s\n", ret, libusb_error_name(ret));
-        return -1;
+        return ret;
     }
 
     if (transferred != (int)len) {
