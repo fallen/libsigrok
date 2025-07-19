@@ -82,7 +82,7 @@ SR_PRIV int sucrela_abort_acquisition(struct dev_context *devc)
 		return SR_ERR;
 	}
 
-	for (i = devc->num_transfers - 1; i >= 0; i--) {
+	for (int i = devc->num_transfers - 1; i >= 0; i--) {
 		if (devc->transfers[i])
 			libusb_cancel_transfer(devc->transfers[i]);
 	}
