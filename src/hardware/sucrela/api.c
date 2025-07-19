@@ -144,7 +144,7 @@ static int config_set(uint32_t key, GVariant *data,
 	switch (key) {
 	case SR_CONF_SAMPLERATE:
 		devc->dig_samplerate = g_variant_get_uint64(data);
-		sr_err("set to %d\n", devc->dig_samplerate);
+		sr_err("set to %"PRIu64"\n", devc->dig_samplerate);
 		devc->oversampling_ratio = 1;
 		if (devc->dig_samplerate == 2 * devc->max_samplerate) {
 			// Let's enable DDRx1 inputs
