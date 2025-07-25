@@ -7,6 +7,7 @@
 
 #include "protocol.h"
 #include "csr.h"
+#include <time.h>
 
 static int sucrela_start_sampling(const struct sr_dev_inst *sdi)
 {

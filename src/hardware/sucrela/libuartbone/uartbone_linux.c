@@ -127,7 +127,7 @@ int uart_write(struct uartbone_ctx *ctx, uint8_t *data, size_t len) {
         ret = write(ctx->fd, data + cur_pos, len - cur_pos);
         if (ret == -1) {
             perror("write");
-            return;
+            return ret;
         }
         cur_pos += ret;
     }
