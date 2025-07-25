@@ -37,7 +37,11 @@ static const double threshold_ranges[][2] = {
 	{ 3.3, 3.3},
 };
 
-
+/*
+ * These are "default" values we use until we can open the device
+ * and detect what it really supports.
+ * proper samplerate array will be in devc->samplerates
+*/
 static const uint64_t samplerates[] = {
 	SR_MHZ(256),
 	SR_MHZ(128),
@@ -187,14 +191,21 @@ static int config_set(uint32_t key, GVariant *data,
 static int config_list(uint32_t key, GVariant **data,
 	const struct sr_dev_inst *sdi, const struct sr_channel_group *cg)
 {
+	struct dev_context *devc = NULL;
 	sr_err("config_list(key=%s, sdi=%p)\n", key_to_str(key), sdi);
+
+	if (sdi)
+		devc = sdi->priv;
 
 	switch (key) {
 	case SR_CONF_SCAN_OPTIONS:
 	case SR_CONF_DEVICE_OPTIONS:
 		return STD_CONFIG_LIST(key, data, sdi, cg, scanopts, drvopts, devopts);
 	case SR_CONF_SAMPLERATE:
-		*data = std_gvar_samplerates(ARRAY_AND_SIZE(samplerates));
+		if (devc)
+			*data = std_gvar_samplerates(ARRAY_AND_SIZE(devc->samplerates));
+		else
+			*data = std_gvar_samplerates(ARRAY_AND_SIZE(samplerates));
 		break;
 	case SR_CONF_TRIGGER_MATCH:
 		*data = std_gvar_array_i32(ARRAY_AND_SIZE(trigger_matches));

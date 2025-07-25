@@ -487,6 +487,7 @@ SR_PRIV int sucrela_dev_open(struct sr_dev_inst *sdi, struct sr_dev_driver *di)
 	ssize_t device_count;
 	struct sr_channel *channels_to_remove[16];
 	struct sr_channel *ch;
+	int oversampling_samplerate_slots;
 
 	sr_err("sucrela_dev_open()\n");
 
@@ -589,10 +590,23 @@ SR_PRIV int sucrela_dev_open(struct sr_dev_inst *sdi, struct sr_dev_driver *di)
 		sr_err("removing channel %d %s\n", j, ch->name);
 	}
 
-	// Create samplerate array
-	for (i = 0; i < NUM_SAMPLERATES; i++) {
-		devc->samplerates[i] = devc->max_samplerate >> i;
+	/*
+	 * the loop only fills the "divided" samplerates, not the oversampling ones
+	 * basically if no oversampling (phy_ratio == 1) we start from i = 0
+	 * so we fill from first samplerate slot with the max samplerate
+	 * if there is oversampling we start at slot 1 (for x2) or 2 (for x4)
+	 * to let room for the x2 and x4 samplerates that are fill by the following
+	 * 2 if()
+	 */
+	oversampling_samplerate_slots = devc->oversampler_phy_ratio >> 1;
+	for (i = oversampling_samplerate_slots; i < NUM_SAMPLERATES; i++) {
+		devc->samplerates[i] = devc->max_samplerate >> (i - oversampling_samplerate_slots);
 	}
+
+	if (devc->oversampler_phy_ratio >= 2)
+		devc->samplerates[oversampling_samplerate_slots - 1] = devc->max_samplerate*2;
+	if (devc->oversampler_phy_ratio >= 4)
+		devc->samplerates[0] = devc->max_samplerate*4;
 
 	i = 0;
 	memset(ident_str, '\0', sizeof(ident_str));
